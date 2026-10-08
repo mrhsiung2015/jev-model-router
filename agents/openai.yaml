@@ -1,0 +1,4 @@
+interface:
+  display_name: "Jev Model Router"
+  short_description: "Use Jev to select a Codex execution model"
+  default_prompt: "Use $jev-model-router to choose the execution model for this task."
