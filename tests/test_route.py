@@ -29,7 +29,7 @@ class PolicyTests(CleanEnvironment):
     def test_default_tiers(self):
         os.environ['JEV_ROUTER_ALLOW_LONG'] = '1'
         for tier, pair in {'fast': ('gpt-6-luna', 'low'), 'balanced': ('gpt-6-luna', 'medium'),
-                           'strong': ('gpt-6-sol', 'high'), 'long': ('gpt-6-astra', 'max')}.items():
+                           'strong': ('gpt-6.1-sol', 'high'), 'long': ('gpt-6-astra', 'max')}.items():
             with self.subTest(tier=tier):
                 result = route.apply_policy({}, tier, .9, None)
                 self.assertEqual(result['status'], 'routed')
@@ -41,6 +41,45 @@ class PolicyTests(CleanEnvironment):
                                    (.7999, 'keep_current'), (.8, 'routed'), (1, 'routed')):
             with self.subTest(confidence=confidence):
                 self.assertEqual(route.apply_policy(request, 'fast', confidence, None)['status'], status)
+
+    def test_old_and_new_sol_refuse_medium_confidence_downgrades(self):
+        for model in ('gpt-6-sol', 'gpt-6.1-sol'):
+            for effort in ('high', '', 'unknown'):
+                for tier in ('fast', 'balanced'):
+                    with self.subTest(model=model, effort=effort, tier=tier):
+                        result = route.apply_policy({'current_model': model, 'current_reasoning_effort': effort}, tier, .7, None)
+                        self.assertEqual(result['reason'], 'medium_confidence_no_downgrade')
+
+    def test_new_sol_can_route_light_work_at_high_confidence(self):
+        for tier, effort in (('fast', 'low'), ('balanced', 'medium')):
+            result = route.apply_policy({'current_model': 'gpt-6.1-sol', 'current_reasoning_effort': 'high'}, tier, .8, None)
+            self.assertEqual((result['status'], result['model'], result['reasoning_effort']), ('routed', 'gpt-6-luna', effort))
+
+    def test_legacy_sol_override_preserves_both_current_sol_roles(self):
+        os.environ['JEV_CODEX_STRONG_MODEL'] = 'gpt-6-sol'
+        result = route.apply_policy({'risk': 'high'}, 'fast', .3, None)
+        self.assertEqual((result['model'], result['reasoning_effort']), ('gpt-6-sol', 'high'))
+        for model in ('gpt-6-sol', 'gpt-6.1-sol'):
+            self.assertEqual(route.current_tier(model, route.models(), 'high'), 'strong')
+            self.assertEqual(route.apply_policy({'current_model': model}, 'balanced', .7, None)['reason'], 'medium_confidence_no_downgrade')
+
+    def test_canonical_roles_when_all_targets_are_overridden(self):
+        for tier in route.TIERS:
+            os.environ[f'JEV_CODEX_{tier.upper()}_MODEL'] = 'gpt-6-luna'
+        for model, expected in (('gpt-6-sol', 'strong'), ('gpt-6.1-sol', 'strong'), ('gpt-6-astra', 'long')):
+            self.assertEqual(route.current_tier(model, route.models()), expected)
+        self.assertIsNone(route.current_tier('external-model', route.models()))
+
+    def test_explicit_targets_take_precedence_over_canonical_roles(self):
+        os.environ['JEV_CODEX_FAST_MODEL'] = 'gpt-6.1-sol'
+        os.environ['JEV_CODEX_STRONG_MODEL'] = 'gpt-6-sol'
+        self.assertEqual(route.current_tier('gpt-6.1-sol', route.models(), 'low'), 'fast')
+        self.assertEqual(route.apply_policy({'current_model': 'gpt-6.1-sol', 'current_reasoning_effort': 'low'}, 'balanced', .7, None)['status'], 'routed')
+
+    def test_new_sol_multi_tier_assignment_uses_effort_or_highest_match(self):
+        os.environ['JEV_CODEX_FAST_MODEL'] = 'gpt-6.1-sol'
+        for effort, expected in (('low', 'fast'), ('high', 'strong'), ('', 'strong'), ('unknown', 'strong')):
+            self.assertEqual(route.current_tier('gpt-6.1-sol', route.models(), effort), expected)
 
     def test_medium_confidence_upgrade_and_same_tier(self):
         request = {'current_model': 'gpt-6-luna', 'current_reasoning_effort': 'low'}
@@ -61,6 +100,7 @@ class PolicyTests(CleanEnvironment):
                 with self.subTest(confidence=confidence, tier=tier):
                     result = route.apply_policy({'risk': 'high'}, tier, confidence, None)
                     self.assertEqual((result['status'], result['tier']), ('routed', 'strong'))
+                    self.assertEqual((result['model'], result['reasoning_effort']), ('gpt-6.1-sol', 'high'))
 
     def test_long_requires_exact_opt_in(self):
         for value, expected in (('', 'strong'), ('true', 'strong'), ('1', 'long')):

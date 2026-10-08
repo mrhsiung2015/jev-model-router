@@ -52,7 +52,16 @@ export TYPESAFE_API_KEY
 使用 $jev-model-router 选择执行子代理，然后完成这个任务：……
 ```
 
-需要全局自动路由时，把 [examples/AGENTS.md](examples/AGENTS.md) 中的规则合并到自己的全局或项目 `AGENTS.md`，保留已有规则。无需修改 Codex 的默认模型配置。
+需要全局自动路由时，把 [examples/AGENTS.md](examples/AGENTS.md) 中的规则合并到自己的全局或项目 `AGENTS.md`，保留已有规则。无需修改 Codex 的默认模型配置。技能安装不会自动修改父会话或子代理的全局默认值。
+
+如果希望新开的本地父会话默认使用 6.1 Sol / high，可自行在 Codex 的 `config.toml` 顶层设置；先确认客户端支持这组值，并检查是否有活动 profile 或项目配置覆盖它们：
+
+```toml
+model = "gpt-6.1-sol"
+model_reasoning_effort = "high"
+```
+
+这是可选的个人偏好，与 Jev 的执行子代理路由分开；已经运行的父会话不会因此在当前轮切换模型。
 
 直接运行脚本也可以验证策略。以下命令完全离线，不需要密钥、不发送网络请求：
 
@@ -75,10 +84,10 @@ printf '%s\n' '{"task":"Implement a contained feature","current_model":"gpt-6-lu
 | --- | --- | --- |
 | Fast | `gpt-6-luna` | `low` |
 | Balanced | `gpt-6-luna` | `medium` |
-| Strong | `gpt-6-sol` | `high` |
+| Strong | `gpt-6.1-sol` | `high` |
 | Long | `gpt-6-astra` | `max` |
 
-这些是原使用环境中的模型 ID，并非通用模型可用性承诺。使用前确认自己的执行工具支持对应 ID 和推理强度；不支持时保留当前模型并报告原因。
+这些是原使用环境中的模型 ID，并非通用模型可用性承诺。6.1 Sol 的官方模型与推理配置见 [OpenAI 模型文档](https://developers.openai.com/api/docs/models/gpt-6.1-sol)。使用前确认自己的执行工具支持对应 ID 和推理强度；不支持时保留当前模型并报告原因。
 
 | 条件 | 行为 |
 | --- | --- |
@@ -91,7 +100,7 @@ printf '%s\n' '{"task":"Implement a contained feature","current_model":"gpt-6-lu
 
 `risk` 必须由调用方正确判断：安全敏感、破坏性操作、生产变更、部署和数据库迁移使用 `high`。高风险下限只作用于合法推荐，不能在 API 故障时保证升级。
 
-Fast 和 Balanced 共用模型 ID，因此应提供 `current_reasoning_effort`。缺少或无法匹配推理强度时，脚本使用该模型匹配的最高档位，避免误降级。当前模型未知或不在配置中时，脚本无法比较升降级；调用方应提供准确上下文并审核中置信度推荐。
+Fast 和 Balanced 共用模型 ID，因此应提供 `current_reasoning_effort`。缺少或无法匹配推理强度时，脚本使用该模型匹配的最高档位，避免误降级。档位识别优先采用精确的配置目标；没有配置匹配时，按内置角色识别 Luna 为 Fast/Balanced、新旧 Sol（`gpt-6-sol`、`gpt-6.1-sol`）为 Strong、Astra 为 Long。这样升级默认模型或覆盖目标后，既有 Sol 会话仍受中置信度拒绝降级保护。显式覆盖可以改变模型所属档位；未知模型无法比较升降级，调用方应审核中置信度推荐。
 
 ## 输入、输出与配置
 
@@ -118,7 +127,7 @@ stdout 状态：`routed` 采用推荐；`keep_current` 策略拒绝推荐；`err
 | `JEV_CODEX_LONG_MODEL` | 覆盖 Long 模型 |
 | `--timeout` | 默认 10 秒，必须为正有限数 |
 
-模型覆盖值仅接受 `gpt-6-luna`、`gpt-6-sol`、`gpt-6-astra`；其他值回退到该档默认值。覆盖模型不改变档位对应的推理强度。
+模型覆盖值仅接受 `gpt-6-luna`、`gpt-6.1-sol`、`gpt-6-sol`、`gpt-6-astra`；其他值回退到该档默认值。覆盖模型不改变档位对应的推理强度。旧版 `JEV_CODEX_STRONG_MODEL=gpt-6-sol` 仍受支持；脚本不会将显式覆盖替换成新版。
 
 ## 隐私与权限
 

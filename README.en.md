@@ -33,7 +33,16 @@ After the first command, type the key and press Enter. This affects only that sh
 Use $jev-model-router to choose an execution subagent, then complete this task: …
 ```
 
-For automatic routing, merge [examples/AGENTS.md](examples/AGENTS.md) into your global or project instructions, preserving existing rules. No change to the default parent model is required.
+For automatic routing, merge [examples/AGENTS.md](examples/AGENTS.md) into your global or project instructions, preserving existing rules. No change to the default parent model is required. Installing the skill does not change global defaults for parents or subagents.
+
+Optionally, to prefer 6.1 Sol / high for new local parent sessions, set these top-level values in your Codex `config.toml` after checking client support and any active profile or project overrides:
+
+```toml
+model = "gpt-6.1-sol"
+model_reasoning_effort = "high"
+```
+
+This is a personal preference separate from Jev routing; it does not switch an already running parent session mid-turn.
 
 The workflow is: minimize the task summary → ask Jev → apply local policy → delegate with the accepted configuration, or continue with the current model. Skip ordinary conversation, trivial answers, status checks, and tasks for which the user already selected a model.
 
@@ -62,10 +71,10 @@ Remove both `--offline-*` arguments for a live request. In restricted Codex envi
 | --- | --- | --- |
 | Fast | `gpt-6-luna` | `low` |
 | Balanced | `gpt-6-luna` | `medium` |
-| Strong | `gpt-6-sol` | `high` |
+| Strong | `gpt-6.1-sol` | `high` |
 | Long | `gpt-6-astra` | `max` |
 
-These IDs come from the original execution environment. They are not a promise of universal model availability. Verify support in your execution tool; if a selected configuration is unavailable, continue with the current model and report the limitation.
+These IDs come from the original execution environment. They are not a promise of universal model availability. See the official [OpenAI model documentation](https://developers.openai.com/api/docs/models/gpt-6.1-sol) for 6.1 Sol and its reasoning configuration. Verify support in your execution tool; if a selected configuration is unavailable, continue with the current model and report the limitation.
 
 - Confidence ≥ 0.80: accept the recommendation, subject to the risk floor and Long toggle.
 - 0.60 ≤ confidence < 0.80: accept upgrades or the same tier; reject downgrades when the current tier can be identified.
@@ -76,7 +85,7 @@ These IDs come from the original execution environment. They are not a promise o
 
 The caller must set `risk: high` for security-sensitive or destructive work, production changes, deployments, and database migrations.
 
-Fast and Balanced share a model ID. Supply `current_reasoning_effort` to distinguish them. If effort is absent or unrecognized, the helper conservatively assumes the highest tier matching that model. If the current model is unknown or outside configured tiers, no upgrade/downgrade comparison is possible; provide accurate context and review medium-confidence recommendations before delegating.
+Fast and Balanced share a model ID. Supply `current_reasoning_effort` to distinguish them. If effort is absent or unrecognized, the helper conservatively assumes the highest matching tier. Exact configured targets take precedence. When no target matches, canonical roles identify Luna as Fast/Balanced, both `gpt-6-sol` and `gpt-6.1-sol` as Strong, and Astra as Long. Existing Sol sessions therefore retain medium-confidence downgrade protection after an upgrade or override. Explicit overrides can reassign a model to another tier. Unknown models cannot be compared; review medium-confidence recommendations before delegating.
 
 ## Input and output
 
@@ -105,7 +114,7 @@ stdout contains a JSON decision: `routed`, `keep_current`, or `error`. The first
 | `JEV_CODEX_LONG_MODEL` | Override Long model |
 | `--timeout` | 10 seconds; must be positive and finite |
 
-Model overrides accept only `gpt-6-luna`, `gpt-6-sol`, or `gpt-6-astra`. Other values fall back to the tier's default. Overrides do not change reasoning efforts.
+Model overrides accept only `gpt-6-luna`, `gpt-6.1-sol`, `gpt-6-sol`, or `gpt-6-astra`. Other values fall back to the tier's default. Overrides do not change reasoning efforts. The legacy `JEV_CODEX_STRONG_MODEL=gpt-6-sol` override remains supported and is not rewritten to the new model.
 
 ## Privacy and permissions
 

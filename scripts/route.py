@@ -22,10 +22,18 @@ TIERS = ("fast", "balanced", "strong", "long")
 DEFAULT_MODELS = {
     "fast": "gpt-6-luna",
     "balanced": "gpt-6-luna",
-    "strong": "gpt-6-sol",
+    "strong": "gpt-6.1-sol",
     "long": "gpt-6-astra",
 }
-ALLOWED_MODELS = frozenset(DEFAULT_MODELS.values())
+# Canonical tiers also recognize models no longer present in configured targets.
+# In particular, an existing GPT-6-Sol session remains Strong after this upgrade.
+CANONICAL_TIERS = {
+    "gpt-6-luna": ("fast", "balanced"),
+    "gpt-6-sol": ("strong",),
+    "gpt-6.1-sol": ("strong",),
+    "gpt-6-astra": ("long",),
+}
+ALLOWED_MODELS = frozenset(CANONICAL_TIERS)
 DEFAULT_EFFORTS = {
     "fast": "low",
     "balanced": "medium",
@@ -72,7 +80,12 @@ def models() -> dict[str, str]:
 def current_tier(
     current_model: str, configured: dict[str, str], current_effort: str = ""
 ) -> str | None:
-    candidates = [tier for tier, model in configured.items() if current_model == model]
+    # Explicit target assignments take precedence over canonical model roles.
+    # Use canonical roles only when the model is absent from all targets; do not
+    # silently rewrite a caller's override (including a legacy Sol override).
+    candidates = [tier for tier in TIERS if configured.get(tier) == current_model]
+    if not candidates:
+        candidates = list(CANONICAL_TIERS.get(current_model, ()))
     for tier in candidates:
         if DEFAULT_EFFORTS[tier] == current_effort:
             return tier
